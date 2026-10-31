@@ -6,7 +6,7 @@
 
 A TurtleBot3 that starts with no idea where it is, figures it out from LiDAR, plans a route and drives it. Particle filter, probabilistic roadmap and pure pursuit, all written by us on ROS 2.
 
-[Try the controller](#try-the-controller-without-ros) · [Architecture](#architecture) · [Lab reports](#documentation)
+**[Watch it run in your browser](https://liiiaamm.github.io/autonomous-navigation-ros2/)** · [Architecture](#architecture) · [Lab reports](#documentation)
 
 **Development period:** January–May 2026
 
@@ -32,6 +32,25 @@ This repository contains the labs and final project of the Autonomous Mobile Rob
 | Path tracking | Pure Pursuit with configurable lookahead distance | `amr_control` |
 | Simulation | ROS 2 to CoppeliaSim bridge, scenes and robot model | `amr_simulation` |
 | Orchestration | Launch files and node lifecycle manager | `amr_bringup` |
+
+## Watch the whole stack in your browser
+
+[![The browser demo: ground truth with LiDAR on the left, particles, roadmap and paths on the right](docs/web-demo.png)](https://liiiaamm.github.io/autonomous-navigation-ros2/)
+
+**[liiiaamm.github.io/autonomous-navigation-ros2](https://liiiaamm.github.io/autonomous-navigation-ros2/)**
+
+Installing ROS 2 and CoppeliaSim takes an afternoon, so the four nodes are also ported to plain JavaScript in [`web/nav.js`](web/nav.js), with the parameters from `amr_bringup/launch/project.launch.py` and the map from `maps/project.json`:
+
+| Node | Port |
+|------|------|
+| `wall_follower` | Same state machine (Front, Turn_Left, Turn_Right) and PD gains on the side distance |
+| `particle_filter` | 1000 particles, 8 of the 240 rays, Gaussian likelihood with σ = 0.2 m, stratified resampling every 10 steps, DBSCAN (ε = 0.2) to decide when it is localized, then 25 particles |
+| `probabilistic_roadmap` | 0.2 m grid, 0.15 m safety distance, 0.3 m connection distance, A*, gradient smoothing with 5 extra points per edge |
+| `pure_pursuit` | 0.3 m lookahead, turn in place above π/3.5, speed scaled by heading error |
+
+The page shows two plots side by side. The left one is ground truth: the true pose and every LiDAR ray. The right one is the robot’s belief: particles, roadmap, A* path and smoothed path, in the colours of our lab-report figures. Below them there is a live `rqt_graph`-style view of the node graph, where each message travels along its topic (`/scan`, `/odometry`, `/pose`, `/path`, `/cmd_vel`), and the node logs. Click either plot to move the goal. Try a long lookahead to see it cut corners into walls.
+
+The JavaScript simulator stands in for CoppeliaSim with differential-drive kinematics, LiDAR and odometry noise, and walls the robot slides along on contact. It also shows a real failure mode: the maze is close to symmetric, so with some seeds the filter commits to the wrong corridor and “arrives” somewhere else. Only the ground-truth plot can tell.
 
 ## Try the controller without ROS
 

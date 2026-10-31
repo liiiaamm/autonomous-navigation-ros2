@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where am I? A TurtleBot finds itself and drives to the goal</title>
+<meta name="description" content="Our ROS 2 navigation stack running in the browser: wall follower, particle filter with DBSCAN, probabilistic roadmap with A*, and pure pursuit, on the project map.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #fbfaf6; --ink: #1d1d1b; --muted: #6b6a64; --rule: #d8d5cc;
+    --b: #0000ff; --c: #00bfbf; --y: #bfbf00; --r: #ff0000; --g: #008000; --c0: #1f77b4; --c1: #ff7f0e;
+    --serif: "Source Serif 4", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    --plot: "DejaVu Sans", Verdana, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 18px; line-height: 1.55; }
+  a { color: inherit; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 2.5rem clamp(1rem, 3vw, 2rem) 4rem; }
+
+  /* the paper header */
+  .kicker { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.04em; color: var(--muted); margin: 0 0 0.75rem; }
+  h1 { font-weight: 700; font-size: clamp(2.1rem, 4.6vw, 3.4rem); line-height: 1.04; letter-spacing: -0.02em; margin: 0 0 0.9rem; max-width: 22ch; }
+  .abstract { max-width: 70ch; margin: 0 0 1.75rem; }
+  .abstract b { font-weight: 600; }
+  .abstract .label { font-variant: small-caps; letter-spacing: 0.06em; font-weight: 600; margin-right: 0.4rem; }
+  .backlinks { font-family: var(--mono); font-size: 0.8rem; display: flex; gap: 1.25rem; flex-wrap: wrap; margin: -0.75rem 0 1.75rem; color: var(--muted); }
+
+  /* controls */
+  .bench { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--paper) 92%, transparent); backdrop-filter: blur(6px); border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); padding: 0.6rem 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.4rem; font-family: var(--mono); font-size: 0.8rem; }
+  .bench button { font: inherit; border: 1.5px solid var(--ink); background: var(--paper); color: var(--ink); padding: 0.35rem 0.8rem; cursor: pointer; border-radius: 2px; }
+  .bench button.primary { background: var(--ink); color: var(--paper); min-width: 6.5rem; }
+  .bench button:hover { background: #eeece4; } .bench button.primary:hover { background: #3a3a36; }
+  .bench label { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--muted); }
+  .bench label b { color: var(--ink); font-weight: 500; min-width: 3.2em; }
+  .bench input[type=range] { width: 7.5rem; accent-color: var(--ink); }
+  .bench select { font: inherit; border: 1px solid var(--rule); background: var(--paper); padding: 0.2rem; }
+  .bench .toggles { display: inline-flex; gap: 0.8rem; }
+  .bench .toggles input { accent-color: var(--ink); }
+
+  /* the mission timeline */
+  .phases { list-style: none; padding: 0; margin: 1.25rem 0 0.25rem; display: grid; grid-template-columns: repeat(4, 1fr); font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+  .phases li { border-top: 3px solid var(--rule); padding-top: 0.45rem; padding-right: 0.6rem; transition: border-color 0.3s, color 0.3s; }
+  .phases li b { display: block; font-family: var(--serif); font-size: 1.02rem; color: inherit; font-weight: 600; }
+  .phases li.done { border-color: var(--ink); color: var(--ink); }
+  .phases li.now { border-color: var(--r); color: var(--ink); }
+
+  /* figures */
+  .figs { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(1rem, 3vw, 2.25rem); margin-top: 1.25rem; }
+  figure { margin: 0; min-width: 0; }
+  .plot { position: relative; background: #fff; border: 1px solid var(--rule); }
+  .plot canvas { display: block; width: 100%; aspect-ratio: 1 / 1; cursor: crosshair; }
+  .plot .tag { position: absolute; top: 0.3rem; right: 0.6rem; font-family: var(--plot); font-size: 12px; color: #333; pointer-events: none; }
+  .read { font-family: var(--mono); font-size: 11.5px; color: #333; border: 1px solid var(--rule); border-top: 0; background: #fff; padding: 0.35rem 0.6rem; min-height: 2.2rem; white-space: pre-wrap; }
+  figcaption { font-size: 0.92rem; color: var(--muted); margin-top: 0.6rem; line-height: 1.45; }
+  figcaption b { color: var(--ink); font-weight: 600; }
+  .key { display: inline-flex; align-items: center; gap: 0.3rem; margin-right: 0.8rem; white-space: nowrap; font-family: var(--plot); font-size: 12px; color: #333; }
+  .sw { display: inline-block; width: 14px; height: 3px; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+  .keys { margin-top: 0.45rem; line-height: 1.9; }
+
+  /* ROS graph + log */
+  .lower { display: grid; grid-template-columns: 1.35fr 1fr; gap: clamp(1rem, 3vw, 2.25rem); margin-top: 2.25rem; }
+  .graph { background: #fff; border: 1px solid var(--rule); overflow-x: auto; }
+  .graph svg { display: block; width: 100%; min-width: 640px; height: auto; font-family: var(--mono); }
+  .node rect { fill: #fff; stroke: #9c9a92; stroke-width: 1.3; transition: fill 0.3s, stroke 0.3s; }
+  .node text { font-size: 12px; fill: #6b6a64; transition: fill 0.3s; }
+  .node.on rect { fill: #fffbe6; stroke: var(--ink); stroke-width: 2; }
+  .node.on text { fill: var(--ink); font-weight: 500; }
+  .edge path { fill: none; stroke: #b9b6ac; stroke-width: 1.2; marker-end: url(#arrow); }
+  .edge text { font-size: 10.5px; fill: #8a877e; }
+  .edge.hot path { stroke: #4a4944; }
+  .edge.hot text { fill: var(--ink); }
+  .pulse { fill: var(--r); }
+  .term { background: #15171a; color: #d7dae0; font-family: var(--mono); font-size: 12px; line-height: 1.55; padding: 0.85rem 1rem; height: 100%; min-height: 15rem; overflow: hidden; border-radius: 2px; }
+  .term div { white-space: pre-wrap; word-break: break-word; }
+  .term .lvl { color: #7fd1a7; } .term .t { color: #8b919c; } .term .n { color: #e5c07b; } .term .w { color: #ff8f73; }
+
+  section.notes { margin-top: 3rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(1rem, 3vw, 2.25rem); border-top: 1px solid var(--rule); padding-top: 1.5rem; }
+  .notes h2 { font-size: 1.05rem; margin: 0 0 0.35rem; }
+  .notes p { margin: 0; font-size: 0.95rem; color: #3e3d39; }
+  .notes code { font-family: var(--mono); font-size: 0.82em; background: #efede6; padding: 0 0.2em; }
+  footer { margin-top: 2.5rem; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; border-top: 1px solid var(--rule); padding-top: 0.9rem; }
+
+  @media (max-width: 860px) {
+    body { font-size: 17px; }
+    .figs, .lower, section.notes { grid-template-columns: 1fr; }
+    .phases { grid-template-columns: 1fr 1fr; gap: 0.5rem 0; }
+    .bench { gap: 0.5rem 1rem; }
+    .bench input[type=range] { width: 6rem; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <p class="kicker">ROS 2 · TurtleBot3 Burger · Autonomous Mobile Robots, ICAI, spring 2026</p>
+  <h1>Where am I? A robot that finds itself, then drives to the goal.</h1>
+  <p class="abstract"><span class="label">Abstract</span>The robot is dropped into a maze with a map but no idea where on it. It explores with a <b>wall follower</b> while a <b>particle filter</b> compares its LiDAR against the map. When the particles collapse into one cluster, a <b>probabilistic roadmap</b> plans a route with A* and <b>pure pursuit</b> drives it. This page runs a JavaScript port of the same four ROS 2 nodes, with the parameters from our launch file. Click either plot to move the goal.</p>
+  <p class="backlinks"><a href="https://github.com/liiiaamm/autonomous-navigation-ros2">Code on GitHub</a><a href="https://liiiaamm.github.io/">liiiaamm.github.io</a></p>
+
+  <div class="bench" role="group" aria-label="Simulation controls">
+    <button class="primary" id="run">Pause</button>
+    <button id="restart" title="Drop the robot again with a new random seed">New run</button>
+    <label>speed <select id="speed"><option value="1">1×</option><option value="3" selected>3×</option><option value="10">10×</option></select></label>
+    <label>lookahead <input id="look" type="range" min="0.15" max="0.6" step="0.05" value="0.3"><b id="lookV">0.30 m</b></label>
+    <label>LiDAR noise σ <input id="noise" type="range" min="0" max="0.1" step="0.005" value="0.01"><b id="noiseV">1.0 cm</b></label>
+    <span class="toggles"><label><input type="checkbox" id="showRays" checked> rays</label><label><input type="checkbox" id="showRoad" checked> roadmap</label></span>
+  </div>
+
+  <ol class="phases" id="phases">
+    <li data-p="explore"><b>Explore</b>wall_follower drives, particle_filter converges</li>
+    <li data-p="plan"><b>Localize and plan</b>one DBSCAN cluster, then A* on the roadmap</li>
+    <li data-p="track"><b>Track</b>pure_pursuit follows the smoothed path</li>
+    <li data-p="goal"><b>Goal</b>within 10 cm of the target</li>
+  </ol>
+
+  <div class="figs">
+    <figure>
+      <div class="plot"><canvas id="world" aria-label="Ground truth: the robot, its LiDAR and the walls"></canvas><span class="tag">ground truth</span></div><div class="read" id="worldRead"></div>
+      <figcaption><b>Figure 1.</b> What the simulator knows: the true pose and the 240 LiDAR rays, one every 1.5°.
+        <div class="keys"><span class="key"><span class="dot" style="background:#1d1d1b"></span>robot</span><span class="key"><span class="dot" style="background:var(--r)"></span>LiDAR hits</span><span class="key"><span class="sw" style="background:#9a9a9a"></span>true trajectory</span></div></figcaption>
+    </figure>
+    <figure>
+      <div class="plot"><canvas id="belief" aria-label="Belief: particles, roadmap and path"></canvas><span class="tag">belief</span></div><div class="read" id="beliefRead"></div>
+      <figcaption><b>Figure 2.</b> What the robot knows: only the map, its odometry and 8 of those rays. Colours follow our lab-report plots.
+        <div class="keys"><span class="key"><span class="sw" style="background:var(--b)"></span>particles</span><span class="key"><span class="sw" style="background:var(--c)"></span>roadmap</span><span class="key"><span class="sw" style="background:var(--c0)"></span>A* path</span><span class="key"><span class="sw" style="background:var(--y)"></span>smoothed</span><span class="key"><span class="dot" style="background:var(--c1)"></span>estimate</span><span class="key" style="color:var(--g)">★ goal</span></div></figcaption>
+    </figure>
+  </div>
+
+  <div class="lower">
+    <figure>
+      <div class="graph"><svg id="rosgraph" viewBox="0 0 860 300" aria-label="ROS 2 node graph"></svg></div>
+      <figcaption><b>Figure 3.</b> The ROS 2 graph, as <code>rqt_graph</code> would draw it. Each red dot is a message; nodes light up while they are driving the robot.</figcaption>
+    </figure>
+    <figure>
+      <div class="term" id="term" aria-live="polite"></div>
+      <figcaption><b>Figure 4.</b> Node logs.</figcaption>
+    </figure>
+  </div>
+
+  <section class="notes">
+    <div><h2>Localization</h2><p>1000 particles start uniformly over the free space, facing one of four directions. Every 10 steps each one predicts 8 LiDAR ranges and is weighted by a Gaussian with σ = 0.2 m, then stratified resampling keeps the plausible ones. DBSCAN (ε = 0.2) on <code>(x, y, cos θ, sin θ)</code> decides when there is a single answer; after that 25 particles track the pose.</p></div>
+    <div><h2>Planning</h2><p>The roadmap is a 0.2 m grid of nodes that keep 0.15 m from the walls, joined when closer than 0.3 m and the segment stays clear. A* uses straight-line distance as the heuristic. The path is resampled with 5 extra points per edge and smoothed by gradient descent (data weight 0.1, smoothness 0.1).</p></div>
+    <div><h2>What can go wrong</h2><p>The maze is almost symmetric, so once in a while the filter commits to the wrong corridor and “arrives” somewhere else. Figure 1 shows the true error, which the robot never sees. Short lookaheads oscillate and long ones cut corners into walls; try both.</p></div>
+  </section>
+
+  <footer><span>Port of sim_ws/src: amr_localization, amr_planning, amr_control. Map: maps/project.json.</span><span>Drawn on canvas, no libraries.</span></footer>
+</div>
+<script src="web/map.js"></script>
+<script src="web/nav.js"></script>
+<script src="web/app.js"></script>
+</body>
+</html>
